@@ -6,9 +6,9 @@ const isProtectedRoute = createRouteMatcher([
   // Ajoutez ici les routes que vous voulez protéger
 ])
 
-export default clerkMiddleware((auth, req) => {
+export default clerkMiddleware(async (auth, req) => {
   if (isProtectedRoute(req)) {
-    auth().protect()
+    await auth.protect()  // ← Ajout de 'await' ici
   }
 })
 
