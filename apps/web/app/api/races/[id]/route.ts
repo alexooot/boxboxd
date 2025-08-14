@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }  // ← Type corrigé pour Next.js 15
 ) {
   try {
-    const raceId = parseInt(params.id)
+    const { id } = await params  // ← Await des params
+    const raceId = parseInt(id)
 
     if (isNaN(raceId)) {
       return NextResponse.json({ error: 'Invalid race ID' }, { status: 400 })
