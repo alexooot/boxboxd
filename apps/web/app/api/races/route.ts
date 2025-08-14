@@ -1,12 +1,15 @@
-// apps/web/app/api/races/route.ts (App Router)
+// apps/web/app/api/races/route.ts
+import { prisma } from '@/lib/prisma' // ← Utilisez le singleton
+import { NextRequest, NextResponse } from 'next/server'
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // Utilisation de vos modèles Prisma existants
+    console.log('🔍 API /races appelée')
+    
+    // Vérifier la connexion DB
+    await prisma.$connect()
+    console.log('✅ Connexion DB établie')
+
     const races = await prisma.race2024.findMany({
       include: {
         circuit: true,
@@ -19,106 +22,62 @@ export async function GET() {
       orderBy: {
         round: 'asc'
       }
-    });
+    })
 
-    // Transformation des données pour correspondre à votre interface frontend
-    const transformedRaces = races.map(race => ({
-      raceid: race.raceId,
-      year: race.season,
-      round: race.round,
-      race_name: race.raceName,
-      date: race.date.toISOString().split('T')[0], // Format YYYY-MM-DD
-      time: race.time ? race.time.toISOString() : null,
-      race_url: race.url,
-      circuitid: race.circuitId,
-      circuit_name: race.circuit.circuitName,
-      location: race.circuit.locality,
-      country: race.circuit.country,
-      lat: race.circuit.lat,
-      lng: race.circuit.long,
-      circuit_url: race.circuit.url,
-      reviews_count: race._count.reviews
-    }));
+    console.log(`📊 ${races.length} courses trouvées`)
 
-    return Response.json({
-      success: true,
-      data: transformedRaces
-    });
+    // Calculer la note moyenne pour chaque course
+    const racesWithRatings = await Promise.all(
+      races.map(async (race) => {
+        const reviews = await prisma.review.findMany({
+          where: { raceId: race.raceId }
+        })
+        
+        const averageRating = reviews.length > 0 
+          ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
+          : 0
+
+        return {
+          raceId: race.raceId,
+          season: race.season,
+          round: race.round,
+          raceName: race.raceName,
+          date: race.date.toISOString().split('T')[0],
+          time: race.time ? race.time.toISOString() : null,
+          url: race.url,
+          circuitId: race.circuitId,
+          circuit: {
+            circuitName: race.circuit.circuitName,
+            country: race.circuit.country,
+            locality: race.circuit.locality,
+            lat: race.circuit.lat,
+            long: race.circuit.long,
+            url: race.circuit.url
+          },
+          _count: race._count,
+          averageRating
+        }
+      })
+    )
+
+    return NextResponse.json(racesWithRatings)
 
   } catch (error) {
-    console.error('Erreur Prisma:', error);
-    return Response.json({
-      success: false,
-      error: 'Erreur lors de la récupération des données',
-      details: error instanceof Error ? error.message : 'Erreur inconnue'
-    }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
-  }
-}
-
-// Si vous utilisez Pages Router, créez apps/web/pages/api/races.ts :
-/*
-import { PrismaClient } from '@prisma/client';
-import type { NextApiRequest, NextApiResponse } from 'next';
-
-const prisma = new PrismaClient();
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === 'GET') {
-    try {
-      const races = await prisma.race2024.findMany({
-        include: {
-          circuit: true,
-          _count: {
-            select: {
-              reviews: true
-            }
-          }
-        },
-        orderBy: {
-          round: 'asc'
-        }
-      });
-
-      const transformedRaces = races.map(race => ({
-        raceid: race.raceId,
-        year: race.season,
-        round: race.round,
-        race_name: race.raceName,
-        date: race.date.toISOString().split('T')[0],
-        time: race.time ? race.time.toISOString() : null,
-        race_url: race.url,
-        circuitid: race.circuitId,
-        circuit_name: race.circuit.circuitName,
-        location: race.circuit.locality,
-        country: race.circuit.country,
-        lat: race.circuit.lat,
-        lng: race.circuit.long,
-        circuit_url: race.circuit.url,
-        reviews_count: race._count.reviews
-      }));
-
-      res.status(200).json({
-        success: true,
-        data: transformedRaces
-      });
-
-    } catch (error) {
-      console.error('Erreur Prisma:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Erreur lors de la récupération des données'
-      });
-    } finally {
-      await prisma.$disconnect();
+    console.error('❌ Erreur API /races:', error)
+    
+    // Plus de détails sur l'erreur
+    if (error instanceof Error) {
+      console.error('Message:', error.message)
+      console.error('Stack:', error.stack)
     }
-  } else {
-    res.setHeader('Allow', ['GET']);
-    res.status(405).json({ 
-      success: false,
-      error: 'Méthode non autorisée' 
-    });
+    
+    return NextResponse.json(
+      { 
+        error: 'Erreur lors de la récupération des données',
+        details: error instanceof Error ? error.message : 'Erreur inconnue',
+        timestamp: new Date().toISOString()
+      }, 
+      { status: 500 }
+    )
   }
 }
-*/
