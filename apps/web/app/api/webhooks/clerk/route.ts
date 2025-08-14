@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   
   try {
     const body = await req.text()
-    const headerPayload = headers()
+    const headerPayload = await headers()  // ← Await ajouté ici
     
     const svix_id = headerPayload.get('svix-id')
     const svix_timestamp = headerPayload.get('svix-timestamp')
